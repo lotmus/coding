@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
@@ -6,6 +7,12 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Break = DocumentFormat.OpenXml.Wordprocessing.Break;
 using Run = DocumentFormat.OpenXml.Wordprocessing.Run;
+using WpfParagraph = System.Windows.Documents.Paragraph;
+using DocxParagraph = DocumentFormat.OpenXml.Wordprocessing.Paragraph;
+using WpfTable = System.Windows.Documents.Table;
+using DocxTable = DocumentFormat.OpenXml.Wordprocessing.Table;
+using WpfColor = System.Windows.Media.Color;
+using DocxColor = DocumentFormat.OpenXml.Wordprocessing.Color;
 
 namespace DocxViewer;
 
@@ -34,18 +41,15 @@ internal static class DocxRenderer
         var defaults = RunFormat.FromDocDefaults(mainPart.StyleDefinitionsPart);
         var styles = mainPart.StyleDefinitionsPart?.Styles;
 
-        Paragraph? current = null;
-
         foreach (var element in mainPart.Document.Body!.Elements())
         {
             switch (element)
             {
-                case Paragraph paragraph:
-                    current = RenderParagraph(paragraph, defaults, styles);
-                    flowDocument.Blocks.Add(current);
+                case DocxParagraph paragraph:
+                    flowDocument.Blocks.Add(RenderParagraph(paragraph, defaults, styles));
                     break;
 
-                case Table table:
+                case DocxTable table:
                     flowDocument.Blocks.Add(RenderTable(table, defaults, styles));
                     break;
             }
@@ -53,7 +57,7 @@ internal static class DocxRenderer
 
         if (flowDocument.Blocks.Count == 0)
         {
-            flowDocument.Blocks.Add(new Paragraph(new System.Windows.Documents.Run("(empty document)")));
+            flowDocument.Blocks.Add(new WpfParagraph(new System.Windows.Documents.Run("(empty document)")));
         }
 
         return flowDocument;
@@ -71,10 +75,10 @@ internal static class DocxRenderer
         }
     }
 
-    private static Paragraph RenderParagraph(Paragraph paragraph, RunFormat defaults, Styles? styles)
+    private static WpfParagraph RenderParagraph(DocxParagraph paragraph, RunFormat defaults, Styles? styles)
     {
         var pPr = paragraph.ParagraphProperties;
-        var result = new Paragraph
+        var result = new WpfParagraph
         {
             Margin = new Thickness(0),
         };
@@ -115,7 +119,7 @@ internal static class DocxRenderer
         return result;
     }
 
-    private static void AppendRun(Paragraph target, Run run, RunFormat paragraphFormat)
+    private static void AppendRun(WpfParagraph target, Run run, RunFormat paragraphFormat)
     {
         var format = RunFormat.FromRunProperties(run.RunProperties, paragraphFormat);
 
@@ -156,7 +160,7 @@ internal static class DocxRenderer
         return run;
     }
 
-    private static void ApplySpacing(Paragraph target, ParagraphProperties? pPr)
+    private static void ApplySpacing(WpfParagraph target, ParagraphProperties? pPr)
     {
         var spacing = pPr?.SpacingBetweenLines;
         double before = 0, after = 0;
@@ -171,7 +175,7 @@ internal static class DocxRenderer
         target.Margin = new Thickness(0, before * (96.0 / 72.0), 0, after * (96.0 / 72.0));
     }
 
-    private static void ApplyAlignment(Paragraph target, ParagraphProperties? pPr)
+    private static void ApplyAlignment(WpfParagraph target, ParagraphProperties? pPr)
     {
         var jc = pPr?.Justification?.Val?.Value;
         target.TextAlignment = jc switch
@@ -183,9 +187,9 @@ internal static class DocxRenderer
         };
     }
 
-    private static Table RenderTable(DocumentFormat.OpenXml.Wordprocessing.Table table, RunFormat defaults, Styles? styles)
+    private static WpfTable RenderTable(DocxTable table, RunFormat defaults, Styles? styles)
     {
-        var wpfTable = new Table { CellSpacing = 0 };
+        var wpfTable = new WpfTable { CellSpacing = 0 };
         var rows = table.Elements<TableRow>().ToList();
         int columnCount = rows.Count == 0 ? 0 : rows.Max(r => r.Elements<TableCell>().Count());
 
@@ -203,7 +207,7 @@ internal static class DocxRenderer
             foreach (var cell in row.Elements<TableCell>())
             {
                 var wpfCell = new TableCell { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(0.5), Padding = new Thickness(4) };
-                foreach (var paragraph in cell.Elements<Paragraph>())
+                foreach (var paragraph in cell.Elements<DocxParagraph>())
                 {
                     wpfCell.Blocks.Add(RenderParagraph(paragraph, defaults, styles));
                 }
@@ -225,7 +229,7 @@ internal sealed class RunFormat
     public bool Italic { get; init; }
     public bool Underline { get; init; }
     public bool Strike { get; init; }
-    public Color? Color { get; init; }
+    public WpfColor? Color { get; init; }
 
     public void ApplyTo(System.Windows.Documents.Run run)
     {
@@ -242,7 +246,7 @@ internal sealed class RunFormat
             run.TextDecorations = decorations;
         }
 
-        if (Color is Color c)
+        if (Color is WpfColor c)
         {
             run.Foreground = new SolidColorBrush(c);
         }
@@ -255,7 +259,7 @@ internal sealed class RunFormat
         return Merge(format, (DocumentFormat.OpenXml.OpenXmlCompositeElement?)rPrDefault);
     }
 
-    public static RunFormat FromParagraphStyle(Paragraph paragraph, Styles? styles, RunFormat inherited)
+    public static RunFormat FromParagraphStyle(DocxParagraph paragraph, Styles? styles, RunFormat inherited)
     {
         var styleId = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
         if (styleId == null || styles == null)
@@ -315,8 +319,8 @@ internal sealed class RunFormat
         var s = rPr.GetFirstChild<Strike>();
         if (s != null) strike = s.Val is null || s.Val.Value;
 
-        Color? color = baseFormat.Color;
-        var colorEl = rPr.GetFirstChild<Color>();
+        WpfColor? color = baseFormat.Color;
+        var colorEl = rPr.GetFirstChild<DocxColor>();
         if (colorEl?.Val?.Value is string hex && hex != "auto" && TryParseHexColor(hex, out var parsed))
         {
             color = parsed;
@@ -334,7 +338,7 @@ internal sealed class RunFormat
         };
     }
 
-    private static bool TryParseHexColor(string hex, out Color color)
+    private static bool TryParseHexColor(string hex, out WpfColor color)
     {
         color = default;
         if (hex.Length != 6) return false;
@@ -343,7 +347,7 @@ internal sealed class RunFormat
             byte r = Convert.ToByte(hex.Substring(0, 2), 16);
             byte g = Convert.ToByte(hex.Substring(2, 2), 16);
             byte bch = Convert.ToByte(hex.Substring(4, 2), 16);
-            color = Color.FromRgb(r, g, bch);
+            color = WpfColor.FromRgb(r, g, bch);
             return true;
         }
         catch
