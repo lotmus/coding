@@ -4,15 +4,7 @@ using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Break = DocumentFormat.OpenXml.Wordprocessing.Break;
-using Run = DocumentFormat.OpenXml.Wordprocessing.Run;
-using WpfParagraph = System.Windows.Documents.Paragraph;
-using DocxParagraph = DocumentFormat.OpenXml.Wordprocessing.Paragraph;
-using WpfTable = System.Windows.Documents.Table;
-using DocxTable = DocumentFormat.OpenXml.Wordprocessing.Table;
-using WpfColor = System.Windows.Media.Color;
-using DocxColor = DocumentFormat.OpenXml.Wordprocessing.Color;
+using W = DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocxViewer;
 
@@ -45,11 +37,11 @@ internal static class DocxRenderer
         {
             switch (element)
             {
-                case DocxParagraph paragraph:
+                case W.Paragraph paragraph:
                     flowDocument.Blocks.Add(RenderParagraph(paragraph, defaults, styles));
                     break;
 
-                case DocxTable table:
+                case W.Table table:
                     flowDocument.Blocks.Add(RenderTable(table, defaults, styles));
                     break;
             }
@@ -57,16 +49,16 @@ internal static class DocxRenderer
 
         if (flowDocument.Blocks.Count == 0)
         {
-            flowDocument.Blocks.Add(new WpfParagraph(new System.Windows.Documents.Run("(empty document)")));
+            flowDocument.Blocks.Add(new Paragraph(new Run("(empty document)")));
         }
 
         return flowDocument;
     }
 
-    private static void ApplyPageSize(FlowDocument flowDocument, Body? body)
+    private static void ApplyPageSize(FlowDocument flowDocument, W.Body? body)
     {
-        var sectPr = body?.Elements<SectionProperties>().FirstOrDefault();
-        var pageSize = sectPr?.GetFirstChild<PageSize>();
+        var sectPr = body?.Elements<W.SectionProperties>().FirstOrDefault();
+        var pageSize = sectPr?.GetFirstChild<W.PageSize>();
         if (pageSize?.Width?.Value is uint w && pageSize.Height?.Value is uint h)
         {
             // Page size is stored in twips (1/20 pt); WPF units are 1/96 in => twips / 15.
@@ -75,10 +67,10 @@ internal static class DocxRenderer
         }
     }
 
-    private static WpfParagraph RenderParagraph(DocxParagraph paragraph, RunFormat defaults, Styles? styles)
+    private static Paragraph RenderParagraph(W.Paragraph paragraph, RunFormat defaults, W.Styles? styles)
     {
         var pPr = paragraph.ParagraphProperties;
-        var result = new WpfParagraph
+        var result = new Paragraph
         {
             Margin = new Thickness(0),
         };
@@ -97,12 +89,12 @@ internal static class DocxRenderer
         {
             switch (run)
             {
-                case Run r:
+                case W.Run r:
                     AppendRun(result, r, paragraphStyleFormat);
                     break;
 
-                case Hyperlink hyperlink:
-                    foreach (var hr in hyperlink.Elements<Run>())
+                case W.Hyperlink hyperlink:
+                    foreach (var hr in hyperlink.Elements<W.Run>())
                     {
                         AppendRun(result, hr, paragraphStyleFormat);
                     }
@@ -113,13 +105,13 @@ internal static class DocxRenderer
         if (result.Inlines.Count == 0)
         {
             // Preserve genuinely empty paragraphs (blank lines) instead of collapsing them.
-            result.Inlines.Add(new System.Windows.Documents.Run(string.Empty));
+            result.Inlines.Add(new Run(string.Empty));
         }
 
         return result;
     }
 
-    private static void AppendRun(WpfParagraph target, Run run, RunFormat paragraphFormat)
+    private static void AppendRun(Paragraph target, W.Run run, RunFormat paragraphFormat)
     {
         var format = RunFormat.FromRunProperties(run.RunProperties, paragraphFormat);
 
@@ -127,17 +119,17 @@ internal static class DocxRenderer
         {
             switch (child)
             {
-                case Text t:
+                case W.Text t:
                     // xml:space="preserve" is respected automatically because we read t.Text directly
                     // rather than trimming it.
                     target.Inlines.Add(CreateInline(t.Text, format));
                     break;
 
-                case TabChar:
+                case W.TabChar:
                     target.Inlines.Add(CreateInline("\t", format));
                     break;
 
-                case Break:
+                case W.Break:
                     // WPF's Paragraph has no inline hard-page-break primitive; mid-paragraph
                     // page/column breaks (w:br type="page"/"column") and plain line breaks
                     // all render as a visible line break here. Paragraph-level page breaks
@@ -146,7 +138,7 @@ internal static class DocxRenderer
                     target.Inlines.Add(new LineBreak());
                     break;
 
-                case CarriageReturn:
+                case W.CarriageReturn:
                     target.Inlines.Add(new LineBreak());
                     break;
             }
@@ -155,12 +147,12 @@ internal static class DocxRenderer
 
     private static Inline CreateInline(string text, RunFormat format)
     {
-        var run = new System.Windows.Documents.Run(text);
+        var run = new Run(text);
         format.ApplyTo(run);
         return run;
     }
 
-    private static void ApplySpacing(WpfParagraph target, ParagraphProperties? pPr)
+    private static void ApplySpacing(Paragraph target, W.ParagraphProperties? pPr)
     {
         var spacing = pPr?.SpacingBetweenLines;
         double before = 0, after = 0;
@@ -175,23 +167,23 @@ internal static class DocxRenderer
         target.Margin = new Thickness(0, before * (96.0 / 72.0), 0, after * (96.0 / 72.0));
     }
 
-    private static void ApplyAlignment(WpfParagraph target, ParagraphProperties? pPr)
+    private static void ApplyAlignment(Paragraph target, W.ParagraphProperties? pPr)
     {
         var jc = pPr?.Justification?.Val?.Value;
         target.TextAlignment = jc switch
         {
-            JustificationValues.Center => TextAlignment.Center,
-            JustificationValues.Right => TextAlignment.Right,
-            JustificationValues.Both => TextAlignment.Justify,
+            W.JustificationValues.Center => TextAlignment.Center,
+            W.JustificationValues.Right => TextAlignment.Right,
+            W.JustificationValues.Both => TextAlignment.Justify,
             _ => TextAlignment.Left,
         };
     }
 
-    private static WpfTable RenderTable(DocxTable table, RunFormat defaults, Styles? styles)
+    private static Table RenderTable(W.Table table, RunFormat defaults, W.Styles? styles)
     {
-        var wpfTable = new WpfTable { CellSpacing = 0 };
-        var rows = table.Elements<TableRow>().ToList();
-        int columnCount = rows.Count == 0 ? 0 : rows.Max(r => r.Elements<TableCell>().Count());
+        var wpfTable = new Table { CellSpacing = 0 };
+        var rows = table.Elements<W.TableRow>().ToList();
+        int columnCount = rows.Count == 0 ? 0 : rows.Max(r => r.Elements<W.TableCell>().Count());
 
         var group = new TableRowGroup();
         wpfTable.RowGroups.Add(group);
@@ -204,10 +196,10 @@ internal static class DocxRenderer
         foreach (var row in rows)
         {
             var wpfRow = new TableRow();
-            foreach (var cell in row.Elements<TableCell>())
+            foreach (var cell in row.Elements<W.TableCell>())
             {
                 var wpfCell = new TableCell { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(0.5), Padding = new Thickness(4) };
-                foreach (var paragraph in cell.Elements<DocxParagraph>())
+                foreach (var paragraph in cell.Elements<W.Paragraph>())
                 {
                     wpfCell.Blocks.Add(RenderParagraph(paragraph, defaults, styles));
                 }
@@ -223,17 +215,17 @@ internal static class DocxRenderer
 /// <summary>Resolved (inherited) run-level formatting: font family, size, weight, style, color, underline.</summary>
 internal sealed class RunFormat
 {
-    public string FontFamily { get; init; } = "Calibri";
+    public string FontFamilyName { get; init; } = "Calibri";
     public double FontSizePt { get; init; } = 11;
     public bool Bold { get; init; }
     public bool Italic { get; init; }
     public bool Underline { get; init; }
     public bool Strike { get; init; }
-    public WpfColor? Color { get; init; }
+    public Color? Color { get; init; }
 
-    public void ApplyTo(System.Windows.Documents.Run run)
+    public void ApplyTo(Run run)
     {
-        run.FontFamily = new FontFamily(FontFamily);
+        run.FontFamily = new FontFamily(FontFamilyName);
         run.FontSize = FontSizePt * (96.0 / 72.0);
         run.FontWeight = Bold ? FontWeights.Bold : FontWeights.Normal;
         run.FontStyle = Italic ? FontStyles.Italic : FontStyles.Normal;
@@ -246,7 +238,7 @@ internal sealed class RunFormat
             run.TextDecorations = decorations;
         }
 
-        if (Color is WpfColor c)
+        if (Color is Color c)
         {
             run.Foreground = new SolidColorBrush(c);
         }
@@ -256,10 +248,10 @@ internal sealed class RunFormat
     {
         var rPrDefault = stylesPart?.Styles?.DocDefaults?.RunPropertiesDefault?.RunPropertiesBaseStyle;
         var format = new RunFormat();
-        return Merge(format, (DocumentFormat.OpenXml.OpenXmlCompositeElement?)rPrDefault);
+        return Merge(format, rPrDefault);
     }
 
-    public static RunFormat FromParagraphStyle(DocxParagraph paragraph, Styles? styles, RunFormat inherited)
+    public static RunFormat FromParagraphStyle(W.Paragraph paragraph, W.Styles? styles, RunFormat inherited)
     {
         var styleId = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
         if (styleId == null || styles == null)
@@ -267,17 +259,17 @@ internal sealed class RunFormat
             return inherited;
         }
 
-        var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+        var style = styles.Elements<W.Style>().FirstOrDefault(s => s.StyleId == styleId);
         var result = inherited;
         // Walk the style's BasedOn chain (base first) so more specific styles win.
-        var chain = new List<Style>();
+        var chain = new List<W.Style>();
         var current = style;
         int guard = 0;
         while (current != null && guard++ < 20)
         {
             chain.Insert(0, current);
             var basedOnId = current.BasedOn?.Val?.Value;
-            current = basedOnId == null ? null : styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOnId);
+            current = basedOnId == null ? null : styles.Elements<W.Style>().FirstOrDefault(s => s.StyleId == basedOnId);
         }
         foreach (var s in chain)
         {
@@ -286,41 +278,41 @@ internal sealed class RunFormat
         return result;
     }
 
-    public static RunFormat FromRunProperties(RunProperties? rPr, RunFormat inherited) => Merge(inherited, rPr);
+    public static RunFormat FromRunProperties(W.RunProperties? rPr, RunFormat inherited) => Merge(inherited, rPr);
 
     private static RunFormat Merge(RunFormat baseFormat, DocumentFormat.OpenXml.OpenXmlCompositeElement? rPr)
     {
         if (rPr == null) return baseFormat;
 
-        string fontFamily = baseFormat.FontFamily;
-        var fonts = rPr.GetFirstChild<RunFonts>();
+        string fontFamily = baseFormat.FontFamilyName;
+        var fonts = rPr.GetFirstChild<W.RunFonts>();
         if (fonts?.Ascii?.Value is string ascii) fontFamily = ascii;
 
         double fontSize = baseFormat.FontSizePt;
-        var sz = rPr.GetFirstChild<FontSize>();
+        var sz = rPr.GetFirstChild<W.FontSize>();
         if (sz?.Val?.Value is string szVal && double.TryParse(szVal, out var halfPoints))
         {
             fontSize = halfPoints / 2.0;
         }
 
         bool bold = baseFormat.Bold;
-        var b = rPr.GetFirstChild<Bold>();
+        var b = rPr.GetFirstChild<W.Bold>();
         if (b != null) bold = b.Val is null || b.Val.Value;
 
         bool italic = baseFormat.Italic;
-        var i = rPr.GetFirstChild<Italic>();
+        var i = rPr.GetFirstChild<W.Italic>();
         if (i != null) italic = i.Val is null || i.Val.Value;
 
         bool underline = baseFormat.Underline;
-        var u = rPr.GetFirstChild<Underline>();
-        if (u != null) underline = u.Val?.Value != null && u.Val.Value != UnderlineValues.None;
+        var u = rPr.GetFirstChild<W.Underline>();
+        if (u != null) underline = u.Val?.Value != null && u.Val.Value != W.UnderlineValues.None;
 
         bool strike = baseFormat.Strike;
-        var s = rPr.GetFirstChild<Strike>();
+        var s = rPr.GetFirstChild<W.Strike>();
         if (s != null) strike = s.Val is null || s.Val.Value;
 
-        WpfColor? color = baseFormat.Color;
-        var colorEl = rPr.GetFirstChild<DocxColor>();
+        Color? color = baseFormat.Color;
+        var colorEl = rPr.GetFirstChild<W.Color>();
         if (colorEl?.Val?.Value is string hex && hex != "auto" && TryParseHexColor(hex, out var parsed))
         {
             color = parsed;
@@ -328,7 +320,7 @@ internal sealed class RunFormat
 
         return new RunFormat
         {
-            FontFamily = fontFamily,
+            FontFamilyName = fontFamily,
             FontSizePt = fontSize,
             Bold = bold,
             Italic = italic,
@@ -338,7 +330,7 @@ internal sealed class RunFormat
         };
     }
 
-    private static bool TryParseHexColor(string hex, out WpfColor color)
+    private static bool TryParseHexColor(string hex, out Color color)
     {
         color = default;
         if (hex.Length != 6) return false;
@@ -347,7 +339,7 @@ internal sealed class RunFormat
             byte r = Convert.ToByte(hex.Substring(0, 2), 16);
             byte g = Convert.ToByte(hex.Substring(2, 2), 16);
             byte bch = Convert.ToByte(hex.Substring(4, 2), 16);
-            color = WpfColor.FromRgb(r, g, bch);
+            color = Color.FromRgb(r, g, bch);
             return true;
         }
         catch
