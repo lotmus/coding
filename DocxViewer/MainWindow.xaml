@@ -1,0 +1,13 @@
+<Window x:Class="DocxViewer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Docx Viewer (read-only, non-locking)" Height="900" Width="850">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button x:Name="OpenButton" Content="Open .docx..." Click="OpenButton_Click" Padding="8,2" />
+            <Separator />
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="8,0" Text="No document loaded." />
+        </ToolBar>
+        <FlowDocumentPageViewer x:Name="Viewer" />
+    </DockPanel>
+</Window>
