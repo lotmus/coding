@@ -1,0 +1,44 @@
+name: DocxViewer Windows build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "DocxViewer/**"
+      - ".github/workflows/docxviewer-build.yml"
+  pull_request:
+    paths:
+      - "DocxViewer/**"
+      - ".github/workflows/docxviewer-build.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore DocxViewer/DocxViewer.csproj
+
+      - name: Build
+        run: dotnet build DocxViewer/DocxViewer.csproj -c Release --no-restore
+
+      - name: Publish (self-contained win-x64 exe)
+        run: >
+          dotnet publish DocxViewer/DocxViewer.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -o publish/win-x64
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocxViewer-win-x64
+          path: publish/win-x64/**
+          if-no-files-found: error
