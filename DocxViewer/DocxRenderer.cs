@@ -169,14 +169,11 @@ internal static class DocxRenderer
 
     private static void ApplyAlignment(Paragraph target, W.ParagraphProperties? pPr)
     {
-        var jc = pPr?.Justification?.Val?.Value;
-        target.TextAlignment = jc switch
-        {
-            W.JustificationValues.Center => TextAlignment.Center,
-            W.JustificationValues.Right => TextAlignment.Right,
-            W.JustificationValues.Both => TextAlignment.Justify,
-            _ => TextAlignment.Left,
-        };
+        var jc = pPr?.Justification?.Val?.Value ?? W.JustificationValues.Left;
+        if (jc == W.JustificationValues.Center) target.TextAlignment = TextAlignment.Center;
+        else if (jc == W.JustificationValues.Right) target.TextAlignment = TextAlignment.Right;
+        else if (jc == W.JustificationValues.Both) target.TextAlignment = TextAlignment.Justify;
+        else target.TextAlignment = TextAlignment.Left;
     }
 
     private static Table RenderTable(W.Table table, RunFormat defaults, W.Styles? styles)
@@ -221,7 +218,7 @@ internal sealed class RunFormat
     public bool Italic { get; init; }
     public bool Underline { get; init; }
     public bool Strike { get; init; }
-    public Color? Color { get; init; }
+    public Color? TextColor { get; init; }
 
     public void ApplyTo(Run run)
     {
@@ -238,7 +235,7 @@ internal sealed class RunFormat
             run.TextDecorations = decorations;
         }
 
-        if (Color is Color c)
+        if (TextColor is Color c)
         {
             run.Foreground = new SolidColorBrush(c);
         }
@@ -311,7 +308,7 @@ internal sealed class RunFormat
         var s = rPr.GetFirstChild<W.Strike>();
         if (s != null) strike = s.Val is null || s.Val.Value;
 
-        Color? color = baseFormat.Color;
+        Color? color = baseFormat.TextColor;
         var colorEl = rPr.GetFirstChild<W.Color>();
         if (colorEl?.Val?.Value is string hex && hex != "auto" && TryParseHexColor(hex, out var parsed))
         {
@@ -326,7 +323,7 @@ internal sealed class RunFormat
             Italic = italic,
             Underline = underline,
             Strike = strike,
-            Color = color,
+            TextColor = color,
         };
     }
 
